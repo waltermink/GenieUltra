@@ -2,23 +2,13 @@ import SwiftUI
 
 struct AttractionsView: View {
     @Environment(ParkDataStore.self) private var store
-    @Binding var selectedPark: ParkSelection
     @State private var sortOption: SortOption = .waitTime
     @State private var filterOption: FilterOption = .operating
 
     // MARK: - Computed Properties
 
     private var currentAttractions: [EntityLiveData] {
-        let source = selectedPark == .disneyland
-            ? store.disneylandAttractions
-            : store.californiaAdventureAttractions
-        return applyFiltersAndSort(to: source)
-    }
-
-    private var currentSchedule: ScheduleEntry? {
-        selectedPark == .disneyland
-            ? store.disneylandSchedule
-            : store.californiaAdventureSchedule
+        applyFiltersAndSort(to: store.attractions)
     }
 
     private var isFilterActive: Bool {
@@ -38,12 +28,9 @@ struct AttractionsView: View {
                     mainContent
                 }
             }
-            .navigationTitle("Attractions")
+            .navigationTitle("Magic Kingdom")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    parkSwitcher
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     filterMenu
                 }
@@ -55,25 +42,6 @@ struct AttractionsView: View {
     }
 
     // MARK: - Toolbar Items
-
-    private var parkSwitcher: some View {
-        Menu {
-            Picker("Park", selection: $selectedPark) {
-                ForEach(ParkSelection.allCases, id: \.self) { park in
-                    Text(park.rawValue).tag(park)
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Text(selectedPark.rawValue)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
 
     private var filterMenu: some View {
         Menu {
@@ -142,7 +110,7 @@ struct AttractionsView: View {
         List {
             Section {
                 ParkHeaderView(
-                    schedule: currentSchedule,
+                    schedule: store.schedule,
                     lastRefreshed: store.lastRefreshed
                 )
             }
@@ -185,6 +153,12 @@ struct AttractionsView: View {
         switch filterOption {
         case .all:
             break
+        case .hasQueue:
+            // Include attractions currently with a queue, plus known queue-based
+            // attractions that are currently down or closed.
+            filtered = filtered.filter {
+                $0.queue != nil || store.knownQueueAttractionIDs.contains($0.id)
+            }
         case .operating:
             filtered = filtered.filter { $0.status == "OPERATING" }
         case .lightningLane:
@@ -211,6 +185,6 @@ struct AttractionsView: View {
 }
 
 #Preview("Attractions") {
-    AttractionsView(selectedPark: .constant(.disneyland))
+    AttractionsView()
         .environment(ParkDataStore.previewStore())
 }

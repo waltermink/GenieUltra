@@ -2,22 +2,12 @@ import SwiftUI
 
 struct ShowsView: View {
     @Environment(ParkDataStore.self) private var store
-    @Binding var selectedPark: ParkSelection
     @State private var showFilterOption: ShowFilterOption = .todayScheduled
 
     // MARK: - Computed Properties
 
     private var currentShows: [EntityLiveData] {
-        let source = selectedPark == .disneyland
-            ? store.disneylandShows
-            : store.californiaAdventureShows
-        return applyShowFilter(to: source)
-    }
-
-    private var currentSchedule: ScheduleEntry? {
-        selectedPark == .disneyland
-            ? store.disneylandSchedule
-            : store.californiaAdventureSchedule
+        applyShowFilter(to: store.shows)
     }
 
     // MARK: - Body
@@ -36,9 +26,6 @@ struct ShowsView: View {
             .navigationTitle("Shows")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    parkSwitcher
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     filterMenu
                 }
@@ -47,25 +34,6 @@ struct ShowsView: View {
     }
 
     // MARK: - Toolbar Items
-
-    private var parkSwitcher: some View {
-        Menu {
-            Picker("Park", selection: $selectedPark) {
-                ForEach(ParkSelection.allCases, id: \.self) { park in
-                    Text(park.rawValue).tag(park)
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Text(selectedPark.rawValue)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
 
     private var filterMenu: some View {
         Menu {
@@ -122,7 +90,7 @@ struct ShowsView: View {
         List {
             Section {
                 ParkHeaderView(
-                    schedule: currentSchedule,
+                    schedule: store.schedule,
                     lastRefreshed: store.lastRefreshed
                 )
             }
@@ -176,6 +144,6 @@ struct ShowsView: View {
 }
 
 #Preview("Shows") {
-    ShowsView(selectedPark: .constant(.disneyland))
+    ShowsView()
         .environment(ParkDataStore.previewStore())
 }

@@ -5,10 +5,25 @@ struct AttractionDetailView: View {
     let attraction: EntityLiveData
     let history: [WaitTimeRecord]
 
+    // Parsed forecast entries — filters out any entries whose time string can't be decoded.
+    private struct ForecastPoint: Identifiable {
+        let id = UUID()
+        let date: Date
+        let waitTime: Int
+    }
+
+    private var forecastPoints: [ForecastPoint] {
+        (attraction.forecast ?? []).compactMap { entry in
+            guard let date = TimeFormatter.parseISO(entry.time) else { return nil }
+            return ForecastPoint(date: date, waitTime: entry.waitTime)
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                // Status
+
+                // Status row
                 HStack {
                     Circle()
                         .fill(statusColor)
@@ -24,7 +39,7 @@ struct AttractionDetailView: View {
                     }
                 }
 
-                // Standby wait time
+                // Current standby wait
                 if let waitTime = attraction.queue?.standby?.waitTime {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Standby Wait")
@@ -45,36 +60,92 @@ struct AttractionDetailView: View {
                     queueSection(title: "Lightning Lane Single Pass", returnTime: paidReturn)
                 }
 
-                // Wait time history chart
+                // Predicted wait time chart (forecast from API)
+                if !forecastPoints.isEmpty {
+                    forecastChart
+                }
+
+                // Live wait time history chart (recorded during this session)
                 if !history.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Wait Time History")
-                            .font(.headline)
-
-                        Chart(history) { entry in
-                            LineMark(
-                                x: .value("Time", entry.date),
-                                y: .value("Wait", entry.waitTime)
-                            )
-                            .foregroundStyle(.blue)
-                            .interpolationMethod(.catmullRom)
-
-                            AreaMark(
-                                x: .value("Time", entry.date),
-                                y: .value("Wait", entry.waitTime)
-                            )
-                            .foregroundStyle(.blue.opacity(0.1))
-                            .interpolationMethod(.catmullRom)
-                        }
-                        .chartYAxisLabel("Minutes")
-                        .frame(height: 200)
-                    }
+                    historyChart
                 }
             }
             .padding()
         }
         .navigationTitle(attraction.name)
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    // MARK: - Forecast Chart
+
+    private var forecastChart: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Predicted Wait Times")
+                .font(.headline)
+
+            let yMax = max((forecastPoints.map(\.waitTime).max() ?? 60) + 10, 60)
+
+            Chart {
+                ForEach(forecastPoints) { point in
+                    BarMark(
+                        x: .value("Time", point.date, unit: .hour),
+                        y: .value("Wait", point.waitTime)
+                    )
+                    .foregroundStyle(
+                        point.date < Date()
+                            ? Color.secondary.opacity(0.35)
+                            : WaitTimeColor.color(for: point.waitTime).opacity(0.85)
+                    )
+                }
+
+                // Current time marker
+                RuleMark(x: .value("Now", Date()))
+                    .foregroundStyle(Color.primary.opacity(0.5))
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 2]))
+                    .annotation(position: .top, alignment: .leading) {
+                        Text("Now")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+            }
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .hour, count: 2)) { _ in
+                    AxisGridLine()
+                    AxisTick()
+                    AxisValueLabel(format: .dateTime.hour(.defaultDigits(amPM: .abbreviated)))
+                }
+            }
+            .chartYScale(domain: 0...yMax)
+            .chartYAxisLabel("min")
+            .frame(height: 200)
+        }
+    }
+
+    // MARK: - History Chart
+
+    private var historyChart: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Wait Time History")
+                .font(.headline)
+
+            Chart(history) { entry in
+                LineMark(
+                    x: .value("Time", entry.date),
+                    y: .value("Wait", entry.waitTime)
+                )
+                .foregroundStyle(.blue)
+                .interpolationMethod(.catmullRom)
+
+                AreaMark(
+                    x: .value("Time", entry.date),
+                    y: .value("Wait", entry.waitTime)
+                )
+                .foregroundStyle(.blue.opacity(0.1))
+                .interpolationMethod(.catmullRom)
+            }
+            .chartYAxisLabel("Minutes")
+            .frame(height: 200)
+        }
     }
 
     // MARK: - Helpers
@@ -119,76 +190,83 @@ struct AttractionDetailView: View {
         }
     }
 }
-// MARK: - Preview
+
+// MARK: - Preview Helpers
 
 private extension AttractionDetailView {
-    /// Generates sample wait-time records for the chart preview.
     static func sampleHistory() -> [WaitTimeRecord] {
-        let calendar = Calendar.current
         let now = Date()
         let waits = [25, 30, 40, 55, 65, 70, 60, 50, 45, 35, 40, 55, 70, 80, 75, 60]
         return waits.enumerated().map { index, wait in
             WaitTimeRecord(
-                date: calendar.date(byAdding: .minute, value: -((waits.count - 1 - index) * 15), to: now)!,
+                date: Calendar.current.date(byAdding: .minute, value: -((waits.count - 1 - index) * 15), to: now)!,
                 waitTime: wait
             )
         }
     }
+
+    static func sampleForecast() -> [ForecastEntry] {
+        let waits = [40, 50, 65, 70, 80, 85, 90, 95, 100, 85, 75, 60, 45, 30]
+        let calendar = Calendar.current
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        let startOfDay = calendar.startOfDay(for: Date())
+        return waits.enumerated().map { index, wait in
+            let date = calendar.date(byAdding: .hour, value: 9 + index, to: startOfDay)!
+            return ForecastEntry(time: formatter.string(from: date), waitTime: wait, percentage: wait)
+        }
+    }
 }
 
-#Preview("Operating — Full") {
+#Preview("Operating — Forecast + History") {
     NavigationStack {
         AttractionDetailView(
             attraction: EntityLiveData(
-                id: "1",
-                name: "Space Mountain",
-                entityType: "ATTRACTION",
-                status: "OPERATING",
-                lastUpdated: "2026-03-30T14:22:00Z",
+                id: "1", name: "Space Mountain", entityType: "ATTRACTION",
+                status: "OPERATING", lastUpdated: "2026-05-15T14:22:00Z",
                 queue: QueueData(
                     standby: StandbyQueue(waitTime: 65),
-                    returnTime: ReturnTimeQueue(state: "AVAILABLE", returnStart: "2026-03-30T15:00:00", returnEnd: "2026-03-30T15:30:00"),
+                    returnTime: ReturnTimeQueue(state: "AVAILABLE", returnStart: "2026-05-15T15:00:00", returnEnd: "2026-05-15T15:30:00"),
                     paidReturnTime: nil
                 ),
-                showtimes: nil
+                showtimes: nil,
+                forecast: AttractionDetailView.sampleForecast()
             ),
             history: AttractionDetailView.sampleHistory()
         )
     }
 }
 
-#Preview("Operating — LL Sold Out + ILL") {
+#Preview("Operating — No Forecast") {
     NavigationStack {
         AttractionDetailView(
             attraction: EntityLiveData(
-                id: "2",
-                name: "TRON Lightcycle / Run",
-                entityType: "ATTRACTION",
-                status: "OPERATING",
-                lastUpdated: "2026-03-30T14:10:00Z",
+                id: "2", name: "Haunted Mansion", entityType: "ATTRACTION",
+                status: "OPERATING", lastUpdated: "2026-05-15T14:10:00Z",
                 queue: QueueData(
-                    standby: StandbyQueue(waitTime: 90),
-                    returnTime: ReturnTimeQueue(state: "FINISHED", returnStart: nil, returnEnd: nil),
-                    paidReturnTime: ReturnTimeQueue(state: "AVAILABLE", returnStart: "2026-03-30T16:00:00", returnEnd: "2026-03-30T16:30:00")
+                    standby: StandbyQueue(waitTime: 30),
+                    returnTime: nil, paidReturnTime: nil
                 ),
-                showtimes: nil
+                showtimes: nil,
+                forecast: nil
             ),
             history: AttractionDetailView.sampleHistory()
         )
     }
 }
 
-#Preview("Closed") {
+#Preview("Meet & Greet") {
     NavigationStack {
         AttractionDetailView(
             attraction: EntityLiveData(
-                id: "3",
-                name: "Splash Mountain",
-                entityType: "ATTRACTION",
-                status: "CLOSED",
-                lastUpdated: nil,
-                queue: nil,
-                showtimes: nil
+                id: "mg1", name: "Mickey Mouse", entityType: "SHOW",
+                status: "OPERATING", lastUpdated: "2026-05-15T13:00:00Z",
+                queue: QueueData(
+                    standby: StandbyQueue(waitTime: 20),
+                    returnTime: nil, paidReturnTime: nil
+                ),
+                showtimes: nil,
+                forecast: AttractionDetailView.sampleForecast()
             ),
             history: []
         )
@@ -199,16 +277,11 @@ private extension AttractionDetailView {
     NavigationStack {
         AttractionDetailView(
             attraction: EntityLiveData(
-                id: "4",
-                name: "Seven Dwarfs Mine Train",
-                entityType: "ATTRACTION",
-                status: "DOWN",
-                lastUpdated: "2026-03-30T13:45:00Z",
-                queue: nil,
-                showtimes: nil
+                id: "3", name: "Seven Dwarfs Mine Train", entityType: "ATTRACTION",
+                status: "DOWN", lastUpdated: "2026-05-15T13:45:00Z",
+                queue: nil, showtimes: nil, forecast: nil
             ),
             history: AttractionDetailView.sampleHistory()
         )
     }
 }
-

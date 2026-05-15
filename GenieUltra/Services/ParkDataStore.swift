@@ -6,16 +6,15 @@ import SwiftUI
 class ParkDataStore {
     // MARK: - Published State
 
-    var disneylandParkID: String = ""
-    var californiaAdventureParkID: String = ""
+    var magicKingdomParkID: String = ""
 
-    var disneylandAttractions: [EntityLiveData] = []
-    var californiaAdventureAttractions: [EntityLiveData] = []
-    var disneylandShows: [EntityLiveData] = []
-    var californiaAdventureShows: [EntityLiveData] = []
+    var attractions: [EntityLiveData] = []
+    var shows: [EntityLiveData] = []
+    var schedule: ScheduleEntry?
 
-    var disneylandSchedule: ScheduleEntry?
-    var californiaAdventureSchedule: ScheduleEntry?
+    // Persisted set of attraction IDs known to have a standby queue,
+    // so DOWN/CLOSED rides still appear in the queue filter.
+    var knownQueueAttractionIDs: Set<String>
 
     var lastRefreshed: Date?
     var isLoading = false
@@ -28,28 +27,35 @@ class ParkDataStore {
 
     private var pollingTask: Task<Void, Never>?
 
+    init() {
+        let saved = UserDefaults.standard.stringArray(forKey: "knownQueueAttractionIDs") ?? []
+        knownQueueAttractionIDs = Set(saved)
+    }
+
     // MARK: - Initial Load
 
     func initialLoad() async {
-        isLoading = true
         error = nil
 
+        // Show cached data from a previous session or background refresh immediately
+        // so the user sees content before the network request completes.
+        if let cached = CachedParkData.load() {
+            processLiveData(cached, saveToCache: false)
+            lastRefreshed = CachedParkData.lastSaved
+        } else {
+            isLoading = true
+        }
+
         do {
-            try await resolveParkIDs()
+            try await resolveParkID()
 
-            // Fetch live data and schedules for both parks in parallel
-            async let dlLive = ThemeParksAPI.fetchEntityLiveData(entityID: disneylandParkID)
-            async let caLive = ThemeParksAPI.fetchEntityLiveData(entityID: californiaAdventureParkID)
-            async let dlSchedule = ThemeParksAPI.fetchEntitySchedule(entityID: disneylandParkID)
-            async let caSchedule = ThemeParksAPI.fetchEntitySchedule(entityID: californiaAdventureParkID)
+            async let liveData = ThemeParksAPI.fetchEntityLiveData(entityID: magicKingdomParkID)
+            async let scheduleData = ThemeParksAPI.fetchEntitySchedule(entityID: magicKingdomParkID)
 
-            let (dlLiveResult, caLiveResult, dlScheduleResult, caScheduleResult) =
-                try await (dlLive, caLive, dlSchedule, caSchedule)
+            let (liveResult, scheduleResult) = try await (liveData, scheduleData)
 
-            processLiveData(dlLiveResult, for: .disneyland)
-            processLiveData(caLiveResult, for: .californiaAdventure)
-            processSchedule(dlScheduleResult, for: .disneyland)
-            processSchedule(caScheduleResult, for: .californiaAdventure)
+            processLiveData(liveResult)
+            processSchedule(scheduleResult)
 
             lastRefreshed = Date()
             consecutiveFailures = 0
@@ -64,16 +70,11 @@ class ParkDataStore {
     // MARK: - Refresh
 
     func refreshLiveData() async {
-        guard !disneylandParkID.isEmpty, !californiaAdventureParkID.isEmpty else { return }
+        guard !magicKingdomParkID.isEmpty else { return }
 
         do {
-            async let dlLive = ThemeParksAPI.fetchEntityLiveData(entityID: disneylandParkID)
-            async let caLive = ThemeParksAPI.fetchEntityLiveData(entityID: californiaAdventureParkID)
-
-            let (dlResult, caResult) = try await (dlLive, caLive)
-
-            processLiveData(dlResult, for: .disneyland)
-            processLiveData(caResult, for: .californiaAdventure)
+            let liveResult = try await ThemeParksAPI.fetchEntityLiveData(entityID: magicKingdomParkID)
+            processLiveData(liveResult)
 
             lastRefreshed = Date()
             consecutiveFailures = 0
@@ -107,46 +108,42 @@ class ParkDataStore {
 
     // MARK: - Private Helpers
 
-    private func resolveParkIDs() async throws {
+    private func resolveParkID() async throws {
         let defaults = UserDefaults.standard
-        if let dlID = defaults.string(forKey: "disneylandParkID"),
-           let caID = defaults.string(forKey: "californiaAdventureParkID"),
-           !dlID.isEmpty, !caID.isEmpty {
-            disneylandParkID = dlID
-            californiaAdventureParkID = caID
+        if let id = defaults.string(forKey: "magicKingdomParkID"), !id.isEmpty {
+            magicKingdomParkID = id
             return
         }
 
         let destinations = try await ThemeParksAPI.fetchDestinations()
-        guard let dlr = destinations.destinations.first(where: {$0.slug == "disneylandresort"})
-        else {
+        guard let wdw = destinations.destinations.first(where: { $0.slug == "waltdisneyworldresort" }) else {
+            throw APIError.invalidResponse
+        }
+        guard let mk = wdw.parks.first(where: { $0.name.contains("Magic Kingdom") }) else {
             throw APIError.invalidResponse
         }
 
-        for park in dlr.parks {
-            let name = park.name.lowercased()
-            if name.contains("california adventure") {
-                californiaAdventureParkID = park.id
-            } else if name.contains("disneyland") {
-                disneylandParkID = park.id
-            }
-        }
-
-        guard !disneylandParkID.isEmpty, !californiaAdventureParkID.isEmpty else {
-            throw APIError.invalidResponse
-        }
-
-        defaults.set(disneylandParkID, forKey: "disneylandParkID")
-        defaults.set(californiaAdventureParkID, forKey: "californiaAdventureParkID")
+        magicKingdomParkID = mk.id
+        defaults.set(magicKingdomParkID, forKey: "magicKingdomParkID")
     }
 
-    private func processLiveData(_ response: EntityLiveDataResponse, for park: Park) {
-        let attractions = response.liveData.filter { $0.entityType == "ATTRACTION" }
-        let shows = response.liveData.filter { $0.entityType == "SHOW" }
+    private func processLiveData(_ response: EntityLiveDataResponse, saveToCache: Bool = true) {
+        if saveToCache {
+            CachedParkData.save(response)
+        }
 
-        // Record wait time history
+        let fetchedAttractions = response.liveData.filter { $0.entityType == "ATTRACTION" }
+        let fetchedShows = response.liveData.filter { $0.entityType == "SHOW" }
+
         let now = Date()
-        for attraction in attractions {
+        var queueIDsChanged = false
+
+        for attraction in fetchedAttractions {
+            if attraction.queue != nil {
+                if knownQueueAttractionIDs.insert(attraction.id).inserted {
+                    queueIDsChanged = true
+                }
+            }
             if let waitTime = attraction.queue?.standby?.waitTime {
                 var history = waitTimeHistory[attraction.id] ?? []
                 history.append(WaitTimeRecord(date: now, waitTime: waitTime))
@@ -157,35 +154,21 @@ class ParkDataStore {
             }
         }
 
-        switch park {
-        case .disneyland:
-            disneylandAttractions = attractions
-            disneylandShows = shows
-        case .californiaAdventure:
-            californiaAdventureAttractions = attractions
-            californiaAdventureShows = shows
+        if queueIDsChanged {
+            UserDefaults.standard.set(Array(knownQueueAttractionIDs), forKey: "knownQueueAttractionIDs")
         }
+
+        attractions = fetchedAttractions
+        shows = fetchedShows
     }
 
-    private func processSchedule(_ response: EntityScheduleResponse, for park: Park) {
+    private func processSchedule(_ response: EntityScheduleResponse) {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         let today = formatter.string(from: Date())
 
-        let todaySchedule = response.schedule.first { entry in
+        schedule = response.schedule.first { entry in
             entry.date == today && entry.type == "OPERATING"
         }
-
-        switch park {
-        case .disneyland:
-            disneylandSchedule = todaySchedule
-        case .californiaAdventure:
-            californiaAdventureSchedule = todaySchedule
-        }
     }
-}
-
-enum Park {
-    case disneyland
-    case californiaAdventure
 }

@@ -12,6 +12,7 @@ struct EntityLiveData: Codable, Identifiable {
     let lastUpdated: String?
     let queue: QueueData?
     let showtimes: [ShowTime]?
+    let forecast: [ForecastEntry]?
 }
 
 struct QueueData: Codable {
@@ -42,6 +43,14 @@ struct ShowTime: Codable, Identifiable {
     let endTime: String?
 
     var id: String { "\(type ?? "")-\(startTime ?? "")-\(endTime ?? "")" }
+}
+
+struct ForecastEntry: Codable, Identifiable {
+    let time: String
+    let waitTime: Int
+    let percentage: Int
+
+    var id: String { time }
 }
 
 struct WaitTimeRecord: Identifiable {

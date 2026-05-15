@@ -7,6 +7,7 @@ enum SortOption: String, CaseIterable {
 
 enum FilterOption: String, CaseIterable {
     case all = "All"
+    case hasQueue = "Queue Attractions"
     case operating = "Operating"
     case lightningLane = "LL Available"
 }

@@ -1,24 +1,23 @@
 import SwiftUI
 
-enum ParkSelection: String, CaseIterable {
-    case disneyland = "Disneyland"
-    case californiaAdventure = "California Adventure"
-}
-
 struct DashboardView: View {
     @Environment(ParkDataStore.self) private var store
+    @Environment(AlertStore.self) private var alertStore
     @Environment(\.scenePhase) private var scenePhase
-    @State private var selectedPark: ParkSelection = .disneyland
 
     var body: some View {
         TabView {
-            AttractionsView(selectedPark: $selectedPark)
+            AttractionsView()
                 .tabItem {
                     Label("Attractions", systemImage: "ticket")
                 }
-            ShowsView(selectedPark: $selectedPark)
+            ShowsView()
                 .tabItem {
                     Label("Shows", systemImage: "theatermasks")
+                }
+            AlertsView()
+                .tabItem {
+                    Label("Alerts", systemImage: "bell.badge")
                 }
             SettingsView()
                 .tabItem {
@@ -28,13 +27,22 @@ struct DashboardView: View {
         .task {
             await store.initialLoad()
             store.startPolling()
+            await NotificationManager.requestPermission()
+        }
+        .onChange(of: store.attractions) { _, newAttractions in
+            guard alertStore.hasActiveAlerts else { return }
+            Task { await alertStore.checkAlerts(against: newAttractions) }
         }
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
             case .active:
+                alertStore.reload()
                 Task { await store.refreshLiveData() }
                 store.startPolling()
-            case .background, .inactive:
+            case .background:
+                store.stopPolling()
+                BackgroundRefreshManager.scheduleNextRefresh()
+            case .inactive:
                 store.stopPolling()
             @unknown default:
                 break
@@ -49,66 +57,64 @@ extension ParkDataStore {
     static func previewStore() -> ParkDataStore {
         let store = ParkDataStore()
         store.lastRefreshed = Date()
-        store.disneylandSchedule = ScheduleEntry(
-            date: "2026-03-30",
+        store.schedule = ScheduleEntry(
+            date: "2026-05-15",
             type: "OPERATING",
-            openingTime: "2026-03-30T08:00:00-07:00",
-            closingTime: "2026-03-30T00:00:00-07:00"
-        )
-        store.californiaAdventureSchedule = ScheduleEntry(
-            date: "2026-03-30",
-            type: "OPERATING",
-            openingTime: "2026-03-30T08:00:00-07:00",
-            closingTime: "2026-03-30T22:00:00-07:00"
+            openingTime: "2026-05-15T09:00:00-04:00",
+            closingTime: "2026-05-15T23:00:00-04:00"
         )
 
-        store.disneylandAttractions = [
+        let sampleForecast: [ForecastEntry] = {
+            let calendar = Calendar.current
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime]
+            let base = calendar.startOfDay(for: Date())
+            let waits = [40, 50, 65, 70, 80, 85, 90, 95, 100, 85, 75, 60, 45, 30]
+            return waits.enumerated().map { i, w in
+                ForecastEntry(time: formatter.string(from: calendar.date(byAdding: .hour, value: 9 + i, to: base)!),
+                              waitTime: w, percentage: w)
+            }
+        }()
+
+        store.attractions = [
             EntityLiveData(id: "1", name: "Space Mountain", entityType: "ATTRACTION", status: "OPERATING", lastUpdated: nil,
                 queue: QueueData(standby: StandbyQueue(waitTime: 45),
-                    returnTime: ReturnTimeQueue(state: "AVAILABLE", returnStart: "2026-03-30T14:30:00", returnEnd: nil),
-                    paidReturnTime: nil), showtimes: nil),
-            EntityLiveData(id: "2", name: "TRON Lightcycle / Run", entityType: "ATTRACTION", status: "OPERATING", lastUpdated: nil,
+                    returnTime: ReturnTimeQueue(state: "AVAILABLE", returnStart: "2026-05-15T14:30:00", returnEnd: nil),
+                    paidReturnTime: nil), showtimes: nil, forecast: sampleForecast),
+            EntityLiveData(id: "2", name: "Seven Dwarfs Mine Train", entityType: "ATTRACTION", status: "OPERATING", lastUpdated: nil,
                 queue: QueueData(standby: StandbyQueue(waitTime: 90),
                     returnTime: ReturnTimeQueue(state: "FINISHED", returnStart: nil, returnEnd: nil),
-                    paidReturnTime: ReturnTimeQueue(state: "AVAILABLE", returnStart: "2026-03-30T16:00:00", returnEnd: nil)), showtimes: nil),
-            EntityLiveData(id: "3", name: "Matterhorn Bobsleds", entityType: "ATTRACTION", status: "OPERATING", lastUpdated: nil,
-                queue: QueueData(standby: StandbyQueue(waitTime: 60),
-                    returnTime: ReturnTimeQueue(state: "AVAILABLE", returnStart: "2026-03-30T15:15:00", returnEnd: nil),
-                    paidReturnTime: nil), showtimes: nil),
-            EntityLiveData(id: "4", name: "Big Thunder Mountain Railroad", entityType: "ATTRACTION", status: "OPERATING", lastUpdated: nil,
+                    paidReturnTime: ReturnTimeQueue(state: "AVAILABLE", returnStart: "2026-05-15T16:00:00", returnEnd: nil)),
+                showtimes: nil, forecast: sampleForecast),
+            EntityLiveData(id: "3", name: "Big Thunder Mountain Railroad", entityType: "ATTRACTION", status: "OPERATING", lastUpdated: nil,
                 queue: QueueData(standby: StandbyQueue(waitTime: 35),
-                    returnTime: nil, paidReturnTime: nil), showtimes: nil),
-            EntityLiveData(id: "5", name: "Haunted Mansion", entityType: "ATTRACTION", status: "OPERATING", lastUpdated: nil,
+                    returnTime: nil, paidReturnTime: nil), showtimes: nil, forecast: nil),
+            EntityLiveData(id: "4", name: "Haunted Mansion", entityType: "ATTRACTION", status: "OPERATING", lastUpdated: nil,
                 queue: QueueData(standby: StandbyQueue(waitTime: 25),
-                    returnTime: nil, paidReturnTime: nil), showtimes: nil),
-            EntityLiveData(id: "6", name: "Pirates of the Caribbean", entityType: "ATTRACTION", status: "DOWN", lastUpdated: nil,
-                queue: nil, showtimes: nil),
-            EntityLiveData(id: "7", name: "Splash Mountain", entityType: "ATTRACTION", status: "REFURBISHMENT", lastUpdated: nil,
-                queue: nil, showtimes: nil),
-            EntityLiveData(id: "8", name: "it's a small world", entityType: "ATTRACTION", status: "CLOSED", lastUpdated: nil,
-                queue: nil, showtimes: nil),
+                    returnTime: nil, paidReturnTime: nil), showtimes: nil, forecast: nil),
+            EntityLiveData(id: "5", name: "Pirates of the Caribbean", entityType: "ATTRACTION", status: "DOWN", lastUpdated: nil,
+                queue: nil, showtimes: nil, forecast: nil),
+            EntityLiveData(id: "6", name: "it's a small world", entityType: "ATTRACTION", status: "CLOSED", lastUpdated: nil,
+                queue: nil, showtimes: nil, forecast: nil),
+            EntityLiveData(id: "7", name: "Tomorrowland Speedway", entityType: "ATTRACTION", status: "OPERATING", lastUpdated: nil,
+                queue: QueueData(standby: StandbyQueue(waitTime: 10),
+                    returnTime: nil, paidReturnTime: nil), showtimes: nil, forecast: nil),
+            // Meet-and-greet (SHOW type with queue — promoted to attractions)
+            EntityLiveData(id: "mg1", name: "Mickey & Minnie Mouse", entityType: "SHOW", status: "OPERATING", lastUpdated: nil,
+                queue: QueueData(standby: StandbyQueue(waitTime: 20),
+                    returnTime: nil, paidReturnTime: nil), showtimes: nil, forecast: nil),
         ]
 
-        store.disneylandShows = [
-            EntityLiveData(id: "s1", name: "Fantasmic!", entityType: "SHOW", status: "OPERATING", lastUpdated: nil, queue: nil,
-                showtimes: [
-                    ShowTime(type: "PERFORMANCE", startTime: "2026-03-30T21:00:00-07:00", endTime: nil),
-                    ShowTime(type: "PERFORMANCE", startTime: "2026-03-30T22:30:00-07:00", endTime: nil),
-                ]),
-            EntityLiveData(id: "s2", name: "Wondrous Journeys", entityType: "SHOW", status: "OPERATING", lastUpdated: nil, queue: nil,
-                showtimes: [
-                    ShowTime(type: "PERFORMANCE", startTime: "2026-03-30T21:30:00-07:00", endTime: nil),
-                ]),
-        ]
+        // Simulate that Pirates, it's a small world, and the meet-and-greet were previously seen with queues
+        store.knownQueueAttractionIDs = ["1", "2", "3", "4", "5", "6", "7", "mg1"]
 
-        store.californiaAdventureAttractions = [
-            EntityLiveData(id: "c1", name: "Radiator Springs Racers", entityType: "ATTRACTION", status: "OPERATING", lastUpdated: nil,
-                queue: QueueData(standby: StandbyQueue(waitTime: 75),
-                    returnTime: ReturnTimeQueue(state: "AVAILABLE", returnStart: "2026-03-30T15:45:00", returnEnd: nil),
-                    paidReturnTime: nil), showtimes: nil),
-            EntityLiveData(id: "c2", name: "Guardians of the Galaxy – Mission: BREAKOUT!", entityType: "ATTRACTION", status: "OPERATING", lastUpdated: nil,
-                queue: QueueData(standby: StandbyQueue(waitTime: 55),
-                    returnTime: nil, paidReturnTime: nil), showtimes: nil),
+        store.shows = [
+            EntityLiveData(id: "s1", name: "Happily Ever After", entityType: "SHOW", status: "OPERATING", lastUpdated: nil, queue: nil,
+                showtimes: [ShowTime(type: "PERFORMANCE", startTime: "2026-05-15T21:00:00-04:00", endTime: nil)],
+                forecast: nil),
+            EntityLiveData(id: "s2", name: "Festival of Fantasy Parade", entityType: "SHOW", status: "OPERATING", lastUpdated: nil, queue: nil,
+                showtimes: [ShowTime(type: "PERFORMANCE", startTime: "2026-05-15T15:00:00-04:00", endTime: nil)],
+                forecast: nil),
         ]
 
         return store
@@ -118,4 +124,5 @@ extension ParkDataStore {
 #Preview("Dashboard") {
     DashboardView()
         .environment(ParkDataStore.previewStore())
+        .environment(AlertStore())
 }

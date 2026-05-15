@@ -125,7 +125,8 @@ struct AttractionRowView: View {
                     returnTime: ReturnTimeQueue(state: "AVAILABLE", returnStart: "2026-03-30T14:30:00", returnEnd: nil),
                     paidReturnTime: nil
                 ),
-                showtimes: nil
+                showtimes: nil,
+                forecast: nil
             ))
 
             AttractionRowView(attraction: EntityLiveData(
@@ -139,7 +140,8 @@ struct AttractionRowView: View {
                     returnTime: ReturnTimeQueue(state: "FINISHED", returnStart: nil, returnEnd: nil),
                     paidReturnTime: ReturnTimeQueue(state: "AVAILABLE", returnStart: "2026-03-30T16:00:00", returnEnd: nil)
                 ),
-                showtimes: nil
+                showtimes: nil,
+                forecast: nil
             ))
         }
 
@@ -155,7 +157,8 @@ struct AttractionRowView: View {
                     returnTime: nil,
                     paidReturnTime: nil
                 ),
-                showtimes: nil
+                showtimes: nil,
+                forecast: nil
             ))
         }
 
@@ -167,7 +170,8 @@ struct AttractionRowView: View {
                 status: "CLOSED",
                 lastUpdated: nil,
                 queue: nil,
-                showtimes: nil
+                showtimes: nil,
+                forecast: nil
             ))
 
             AttractionRowView(attraction: EntityLiveData(
@@ -177,7 +181,8 @@ struct AttractionRowView: View {
                 status: "DOWN",
                 lastUpdated: nil,
                 queue: nil,
-                showtimes: nil
+                showtimes: nil,
+                forecast: nil
             ))
 
             AttractionRowView(attraction: EntityLiveData(
@@ -187,7 +192,8 @@ struct AttractionRowView: View {
                 status: "REFURBISHMENT",
                 lastUpdated: nil,
                 queue: nil,
-                showtimes: nil
+                showtimes: nil,
+                forecast: nil
             ))
         }
     }

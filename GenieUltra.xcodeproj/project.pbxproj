@@ -10,9 +10,22 @@
 		248BAB7E2F7AF6390054BD52 /* GenieUltra.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GenieUltra.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		24D2771F2FB75EBB00AA543C /* Exceptions for "GenieUltra" folder in "GenieUltra" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 248BAB7D2F7AF6390054BD52 /* GenieUltra */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		248BAB802F7AF6390054BD52 /* GenieUltra */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				24D2771F2FB75EBB00AA543C /* Exceptions for "GenieUltra" folder in "GenieUltra" target */,
+			);
 			path = GenieUltra;
 			sourceTree = "<group>";
 		};
@@ -256,6 +269,7 @@
 				DEVELOPMENT_TEAM = 64P3WBPUAB;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GenieUltra/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Genie Ultra";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -294,6 +308,7 @@
 				DEVELOPMENT_TEAM = 64P3WBPUAB;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GenieUltra/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Genie Ultra";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

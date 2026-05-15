@@ -94,7 +94,9 @@ class ParkDataStore {
         stopPolling()
         pollingTask = Task {
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(60))
+                let raw = UserDefaults.standard.double(forKey: "pollingInterval")
+                let interval = raw >= 30 ? raw : 60
+                try? await Task.sleep(for: .seconds(interval))
                 guard !Task.isCancelled else { break }
                 await refreshLiveData()
             }
@@ -132,25 +134,35 @@ class ParkDataStore {
             CachedParkData.save(response)
         }
 
-        let fetchedAttractions = response.liveData.filter { $0.entityType == "ATTRACTION" }
-        let fetchedShows = response.liveData.filter { $0.entityType == "SHOW" }
+        // SHOW entities that have (or have ever had) a standby queue are character
+        // meet-and-greets. Promote them to attractions so they appear in the attractions tab.
+        let fetchedAttractions = response.liveData.filter { entity in
+            entity.entityType == "ATTRACTION" ||
+            (entity.entityType == "SHOW" &&
+                (entity.queue?.standby != nil || knownQueueAttractionIDs.contains(entity.id)))
+        }
+        let fetchedShows = response.liveData.filter { entity in
+            entity.entityType == "SHOW" &&
+            entity.queue?.standby == nil &&
+            !knownQueueAttractionIDs.contains(entity.id)
+        }
 
         let now = Date()
         var queueIDsChanged = false
 
-        for attraction in fetchedAttractions {
-            if attraction.queue != nil {
-                if knownQueueAttractionIDs.insert(attraction.id).inserted {
+        for entity in fetchedAttractions {
+            if entity.queue != nil {
+                if knownQueueAttractionIDs.insert(entity.id).inserted {
                     queueIDsChanged = true
                 }
             }
-            if let waitTime = attraction.queue?.standby?.waitTime {
-                var history = waitTimeHistory[attraction.id] ?? []
+            if let waitTime = entity.queue?.standby?.waitTime {
+                var history = waitTimeHistory[entity.id] ?? []
                 history.append(WaitTimeRecord(date: now, waitTime: waitTime))
                 if history.count > 120 {
                     history = Array(history.suffix(120))
                 }
-                waitTimeHistory[attraction.id] = history
+                waitTimeHistory[entity.id] = history
             }
         }
 
@@ -172,3 +184,4 @@ class ParkDataStore {
         }
     }
 }
+

@@ -1,25 +1,38 @@
 import Foundation
 
-/// Persists the most recent live data response so it can be shared between the
-/// foreground app, background refreshes, and (eventually) widget extensions via App Groups.
+/// Persists the most recent live data response. Uses the App Group suite so the
+/// widget extension can read it. Falls back to UserDefaults.standard if the App
+/// Group entitlement hasn't been enabled yet.
 enum CachedParkData {
-    // NOTE: When adding widget targets, change both keys to use
-    // UserDefaults(suiteName: "group.com.genieultra") for cross-process sharing.
-    private static let responseKey = "cachedLiveDataResponse"
-    private static let timestampKey = "cachedLiveDataTimestamp"
+    static let appGroupID = "group.com.genieultra"
+    static let responseKey  = "cachedLiveDataResponse"
+    static let timestampKey = "cachedLiveDataTimestamp"
+    /// Key for the ordered list of attraction IDs the user wants shown in the widget.
+    static let widgetAttractionIDsKey = "widgetAttractionIDs"
+
+    private static var defaults: UserDefaults {
+        UserDefaults(suiteName: appGroupID) ?? .standard
+    }
 
     static func save(_ response: EntityLiveDataResponse) {
         guard let data = try? JSONEncoder().encode(response) else { return }
-        UserDefaults.standard.set(data, forKey: responseKey)
-        UserDefaults.standard.set(Date(), forKey: timestampKey)
+        defaults.set(data, forKey: responseKey)
+        defaults.set(Date(), forKey: timestampKey)
     }
 
     static func load() -> EntityLiveDataResponse? {
-        guard let data = UserDefaults.standard.data(forKey: responseKey) else { return nil }
+        guard let data = defaults.data(forKey: responseKey) else { return nil }
         return try? JSONDecoder().decode(EntityLiveDataResponse.self, from: data)
     }
 
     static var lastSaved: Date? {
-        UserDefaults.standard.object(forKey: timestampKey) as? Date
+        defaults.object(forKey: timestampKey) as? Date
+    }
+
+    // MARK: - Widget Attraction Selection
+
+    static var widgetAttractionIDs: [String] {
+        get { defaults.stringArray(forKey: widgetAttractionIDsKey) ?? [] }
+        set { defaults.set(newValue, forKey: widgetAttractionIDsKey) }
     }
 }

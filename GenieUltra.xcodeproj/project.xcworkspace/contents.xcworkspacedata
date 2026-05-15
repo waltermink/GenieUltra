@@ -4,4 +4,11 @@
    <FileRef
       location = "self:">
    </FileRef>
+   <Group
+      location = "group:GenieUltraWidget"
+      name = "GenieUltraWidget">
+      <FileRef
+         location = "group:GenieUltraWidgetBundle.swift">
+      </FileRef>
+   </Group>
 </Workspace>

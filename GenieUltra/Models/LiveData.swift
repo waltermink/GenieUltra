@@ -4,7 +4,7 @@ struct EntityLiveDataResponse: Codable {
     let liveData: [EntityLiveData]
 }
 
-struct EntityLiveData: Codable, Identifiable {
+struct EntityLiveData: Codable, Identifiable, Equatable {
     let id: String
     let name: String
     let entityType: String
@@ -15,7 +15,7 @@ struct EntityLiveData: Codable, Identifiable {
     let forecast: [ForecastEntry]?
 }
 
-struct QueueData: Codable {
+struct QueueData: Codable, Equatable {
     let standby: StandbyQueue?
     let returnTime: ReturnTimeQueue?
     let paidReturnTime: ReturnTimeQueue?
@@ -27,17 +27,17 @@ struct QueueData: Codable {
     }
 }
 
-struct StandbyQueue: Codable {
+struct StandbyQueue: Codable, Equatable {
     let waitTime: Int?
 }
 
-struct ReturnTimeQueue: Codable {
+struct ReturnTimeQueue: Codable, Equatable {
     let state: String?
     let returnStart: String?
     let returnEnd: String?
 }
 
-struct ShowTime: Codable, Identifiable {
+struct ShowTime: Codable, Identifiable, Equatable {
     let type: String?
     let startTime: String?
     let endTime: String?
@@ -45,7 +45,7 @@ struct ShowTime: Codable, Identifiable {
     var id: String { "\(type ?? "")-\(startTime ?? "")-\(endTime ?? "")" }
 }
 
-struct ForecastEntry: Codable, Identifiable {
+struct ForecastEntry: Codable, Identifiable, Equatable {
     let time: String
     let waitTime: Int
     let percentage: Int

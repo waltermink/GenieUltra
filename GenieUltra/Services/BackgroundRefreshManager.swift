@@ -8,7 +8,7 @@ enum BackgroundRefreshManager {
     static let enabledKey  = "backgroundPollingEnabled"
 
     // Minimum configurable interval is 1 minute; iOS enforces ~15 min in practice.
-    static let minimumInterval: TimeInterval = 60
+    static let minimumInterval: TimeInterval = 30
     static let maximumInterval: TimeInterval = 60 * 60
 
     static var currentInterval: TimeInterval {

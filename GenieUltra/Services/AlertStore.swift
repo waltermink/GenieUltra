@@ -46,6 +46,15 @@ class AlertStore {
     func addWaitAlert(_ alert: WaitTimeAlert) { waitTimeAlerts.append(alert); save() }
     func addLLAlert(_ alert: LightningLaneAlert) { lightningLaneAlerts.append(alert); save() }
 
+    func updateWaitAlert(_ alert: WaitTimeAlert) {
+        guard let idx = waitTimeAlerts.firstIndex(where: { $0.id == alert.id }) else { return }
+        waitTimeAlerts[idx] = alert; save()
+    }
+    func updateLLAlert(_ alert: LightningLaneAlert) {
+        guard let idx = lightningLaneAlerts.firstIndex(where: { $0.id == alert.id }) else { return }
+        lightningLaneAlerts[idx] = alert; save()
+    }
+
     func deleteWaitAlert(id: UUID) { waitTimeAlerts.removeAll { $0.id == id }; save() }
     func deleteLLAlert(id: UUID) { lightningLaneAlerts.removeAll { $0.id == id }; save() }
 
@@ -164,6 +173,16 @@ class AlertStore {
             body: "Test: return time would be within your \(hourLabel(alert.windowStartHour))–\(hourLabel(alert.windowEndHour)) window",
             identifier: "test-ll-\(alert.id)-\(Date().timeIntervalSince1970)"
         )
+    }
+
+    /// Fires test notifications for every enabled alert regardless of conditions or cooldown.
+    func fireAllTests() async {
+        for alert in waitTimeAlerts where alert.enabled {
+            await fireTest(waitAlert: alert)
+        }
+        for alert in lightningLaneAlerts where alert.enabled {
+            await fireTest(llAlert: alert)
+        }
     }
 
     private func hourLabel(_ hour: Int) -> String {

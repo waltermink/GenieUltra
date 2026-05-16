@@ -5,6 +5,8 @@ import UserNotifications
 struct GenieUltraApp: App {
     @State private var store = ParkDataStore()
     @State private var alertStore = AlertStore()
+    @State private var liveActivityManager = LiveActivityManager()
+    @State private var pushServer = PushServerClient()
 
     // Retained for the lifetime of the app — UNUserNotificationCenter holds a weak reference.
     private let notificationDelegate = ForegroundNotificationDelegate()
@@ -19,6 +21,21 @@ struct GenieUltraApp: App {
             DashboardView()
                 .environment(store)
                 .environment(alertStore)
+                .environment(liveActivityManager)
+                .environment(pushServer)
+                .task {
+                    // AlertStore.save() writes to UserDefaults first, THEN fires
+                    // this callback, so by the time syncAlerts() reads from
+                    // UserDefaults it sees the up-to-date config. Capturing only
+                    // pushServer avoids the alertStore → closure → alertStore
+                    // retain cycle (alertStore owns the callback).
+                    alertStore.onAlertsChanged = { [pushServer] in
+                        Task { await pushServer.syncAlerts() }
+                    }
+                    // Initial sync on launch covers the app-killed-then-reopened
+                    // case where alerts changed since the last sync.
+                    await pushServer.syncAlerts()
+                }
         }
         // Registers the BGAppRefreshTask handler automatically — no manual
         // BGTaskScheduler.register(...) call needed. Requires

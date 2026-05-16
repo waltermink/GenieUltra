@@ -100,6 +100,7 @@ enum BackgroundRefreshManager {
 
         CachedParkData.save(response)
         persistHistory(from: response.liveData, filter: nil)
+        await LiveActivityManager.backgroundUpdate(with: response.liveData)
 
         if AlertStore.hasActiveAlertsInStorage() {
             await AlertStore.backgroundCheck(against: response.liveData)
@@ -118,6 +119,7 @@ enum BackgroundRefreshManager {
         guard let response = try? await ThemeParksAPI.fetchEntityLiveData(entityID: parkID) else { return }
 
         persistHistory(from: response.liveData, filter: monitoredIDs)
+        await LiveActivityManager.backgroundUpdate(with: response.liveData)
 
         if AlertStore.hasActiveWaitAlertsInStorage() {
             await AlertStore.backgroundCheckWaitAlerts(entities: response.liveData)
@@ -134,6 +136,7 @@ enum BackgroundRefreshManager {
         guard let parkID = resolvedParkID() else { return }
         guard let response = try? await ThemeParksAPI.fetchEntityLiveData(entityID: parkID) else { return }
 
+        await LiveActivityManager.backgroundUpdate(with: response.liveData)
         await AlertStore.backgroundCheckLLAlerts(entities: response.liveData)
     }
 

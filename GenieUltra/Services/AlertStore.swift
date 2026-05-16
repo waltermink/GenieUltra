@@ -15,6 +15,11 @@ class AlertStore {
     var waitTimeAlerts: [WaitTimeAlert] = []
     var lightningLaneAlerts: [LightningLaneAlert] = []
 
+    /// Invoked after every successful save. The App wires this to PushServerClient
+    /// so server-side alert config stays in sync with the local one without
+    /// AlertStore having a direct dependency on the network layer.
+    var onAlertsChanged: (() -> Void)?
+
     init() { load() }
 
     // MARK: - Persistence
@@ -26,6 +31,7 @@ class AlertStore {
         if let data = try? JSONEncoder().encode(lightningLaneAlerts) {
             UserDefaults.standard.set(data, forKey: AlertKeys.llAlerts)
         }
+        onAlertsChanged?()
     }
 
     func reload() { load() }

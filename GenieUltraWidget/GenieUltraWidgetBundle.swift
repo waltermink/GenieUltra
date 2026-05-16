@@ -5,5 +5,6 @@ import SwiftUI
 struct GenieUltraWidgetBundle: WidgetBundle {
     var body: some Widget {
         WaitTimesWidget()
+        WaitTimeLiveActivity()
     }
 }

@@ -3,6 +3,10 @@ import SwiftUI
 // MARK: - Alerts Hub
 
 struct AlertsView: View {
+    @Environment(AlertStore.self) private var alertStore
+    @Environment(ParkDataStore.self) private var store
+    @Environment(LiveActivityManager.self) private var liveActivityManager
+
     @State private var selectedTab = 0
 
     var body: some View {
@@ -24,6 +28,27 @@ struct AlertsView: View {
             }
             .navigationTitle("Alerts")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    if liveActivityManager.isSupported && alertStore.hasActiveAlerts {
+                        Button {
+                            if liveActivityManager.isActive {
+                                Task { await liveActivityManager.stopMonitoring() }
+                            } else {
+                                liveActivityManager.startMonitoring(attractions: store.attractions)
+                            }
+                        } label: {
+                            Label(
+                                liveActivityManager.isActive ? "Stop Live" : "Live Monitor",
+                                systemImage: liveActivityManager.isActive
+                                    ? "bolt.slash.fill"
+                                    : "bolt.fill"
+                            )
+                            .foregroundStyle(liveActivityManager.isActive ? .red : .yellow)
+                        }
+                    }
+                }
+            }
         }
     }
 }

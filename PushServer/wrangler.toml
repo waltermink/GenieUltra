@@ -1,0 +1,30 @@
+name = "genieultra-push"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+# Cron — every minute. The Worker polls themeparks.wiki on this schedule.
+[triggers]
+crons = ["* * * * *"]
+
+# Non-secret config. Edit before first deploy.
+[vars]
+PARK_ID       = "REPLACE_WITH_MAGIC_KINGDOM_ENTITY_ID"
+# IANA timezone identifier — handles DST automatically. WDW is America/New_York.
+PARK_TIMEZONE = "America/New_York"
+
+# KV namespace for alert config + dedup state.
+# Run `wrangler kv namespace create ALERT_STATE` and paste the returned id here.
+[[kv_namespaces]]
+binding = "ALERT_STATE"
+id      = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+# ── Secrets (set with `wrangler secret put NAME`, NOT in this file) ──
+#
+#   SHARED_SECRET       (required)  — random string; iOS app + admin auth
+#   NTFY_TOPIC          (optional)  — your private ntfy.sh topic name
+#   NTFY_AUTH           (optional)  — Bearer token if your topic is protected
+#   TELEGRAM_BOT_TOKEN  (optional)  — from @BotFather
+#   TELEGRAM_CHAT_ID    (optional)  — your numeric chat ID
+#
+# Configure at least one of: NTFY_TOPIC, or both TELEGRAM_* secrets. Configure
+# both for redundancy — every notification is sent to all configured channels.

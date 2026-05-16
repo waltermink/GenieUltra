@@ -3,6 +3,7 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(ParkDataStore.self) private var store
     @Environment(AlertStore.self) private var alertStore
+    @Environment(LiveActivityManager.self) private var liveActivityManager
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -32,6 +33,9 @@ struct DashboardView: View {
         .onChange(of: store.attractions) { _, newAttractions in
             guard alertStore.hasActiveAlerts else { return }
             Task { await alertStore.checkAlerts(against: newAttractions) }
+            if liveActivityManager.isActive {
+                Task { await liveActivityManager.update(with: newAttractions) }
+            }
         }
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {

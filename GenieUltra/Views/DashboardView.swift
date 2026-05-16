@@ -37,11 +37,12 @@ struct DashboardView: View {
             switch newPhase {
             case .active:
                 alertStore.reload()
+                store.mergePersistedHistory()
                 Task { await store.refreshLiveData() }
                 store.startPolling()
             case .background:
                 store.stopPolling()
-                BackgroundRefreshManager.scheduleNextRefresh()
+                BackgroundRefreshManager.scheduleAll()
             case .inactive:
                 store.stopPolling()
             @unknown default:

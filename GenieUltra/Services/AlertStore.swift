@@ -195,13 +195,33 @@ class AlertStore {
     // MARK: - Background Alert Checking (nonisolated static — safe to call from BGAppRefreshTask)
 
     nonisolated static func hasActiveAlertsInStorage() -> Bool {
-        if let data = UserDefaults.standard.data(forKey: AlertKeys.waitAlerts),
-           let alerts = try? JSONDecoder().decode([WaitTimeAlert].self, from: data),
-           alerts.contains(where: { $0.enabled }) { return true }
-        if let data = UserDefaults.standard.data(forKey: AlertKeys.llAlerts),
-           let alerts = try? JSONDecoder().decode([LightningLaneAlert].self, from: data),
-           alerts.contains(where: { $0.enabled }) { return true }
-        return false
+        hasActiveWaitAlertsInStorage() || hasActiveLLAlertsInStorage()
+    }
+
+    nonisolated static func hasActiveWaitAlertsInStorage() -> Bool {
+        guard let data = UserDefaults.standard.data(forKey: AlertKeys.waitAlerts),
+              let alerts = try? JSONDecoder().decode([WaitTimeAlert].self, from: data) else { return false }
+        return alerts.contains { $0.enabled }
+    }
+
+    nonisolated static func hasActiveLLAlertsInStorage() -> Bool {
+        guard let data = UserDefaults.standard.data(forKey: AlertKeys.llAlerts),
+              let alerts = try? JSONDecoder().decode([LightningLaneAlert].self, from: data) else { return false }
+        return alerts.contains { $0.enabled }
+    }
+
+    /// Attraction IDs from every enabled wait-time alert.
+    nonisolated static func monitoredWaitAttractionIDs() -> Set<String> {
+        guard let data = UserDefaults.standard.data(forKey: AlertKeys.waitAlerts),
+              let alerts = try? JSONDecoder().decode([WaitTimeAlert].self, from: data) else { return [] }
+        return Set(alerts.filter { $0.enabled }.map { $0.attractionID })
+    }
+
+    /// Attraction IDs from every enabled Lightning Lane alert.
+    nonisolated static func monitoredLLAttractionIDs() -> Set<String> {
+        guard let data = UserDefaults.standard.data(forKey: AlertKeys.llAlerts),
+              let alerts = try? JSONDecoder().decode([LightningLaneAlert].self, from: data) else { return [] }
+        return Set(alerts.filter { $0.enabled }.map { $0.attractionID })
     }
 
     nonisolated static func backgroundCheck(against entities: [EntityLiveData]) async {
@@ -209,7 +229,7 @@ class AlertStore {
         await backgroundCheckLLAlerts(entities: entities)
     }
 
-    nonisolated private static func backgroundCheckWaitAlerts(entities: [EntityLiveData]) async {
+    nonisolated static func backgroundCheckWaitAlerts(entities: [EntityLiveData]) async {
         guard let data = UserDefaults.standard.data(forKey: AlertKeys.waitAlerts),
               var alerts = try? JSONDecoder().decode([WaitTimeAlert].self, from: data) else { return }
 
@@ -253,7 +273,7 @@ class AlertStore {
         }
     }
 
-    nonisolated private static func backgroundCheckLLAlerts(entities: [EntityLiveData]) async {
+    nonisolated static func backgroundCheckLLAlerts(entities: [EntityLiveData]) async {
         guard let data = UserDefaults.standard.data(forKey: AlertKeys.llAlerts),
               var alerts = try? JSONDecoder().decode([LightningLaneAlert].self, from: data) else { return }
 

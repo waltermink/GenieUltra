@@ -4,9 +4,22 @@ struct SettingsView: View {
     @Environment(AlertStore.self) private var alertStore
     @Environment(ParkDataStore.self) private var store
 
+    // MARK: Foreground Polling
     @AppStorage("pollingInterval") private var pollingInterval: Double = 60
+
+    // MARK: Background — Full Sweep
     @AppStorage(BackgroundRefreshManager.intervalKey) private var backgroundInterval: Double = BackgroundRefreshManager.minimumInterval
-    @AppStorage(BackgroundRefreshManager.enabledKey) private var backgroundEnabled: Bool = true
+    @AppStorage(BackgroundRefreshManager.enabledKey)  private var backgroundEnabled: Bool = true
+
+    // MARK: Background — Targeted Wait Time
+    @AppStorage(BackgroundRefreshManager.targetedWaitIntervalKey) private var targetedWaitInterval: Double = 5 * 60
+    @AppStorage(BackgroundRefreshManager.targetedWaitEnabledKey)  private var targetedWaitEnabled: Bool = true
+
+    // MARK: Background — Targeted Lightning Lane
+    @AppStorage(BackgroundRefreshManager.targetedLLIntervalKey) private var targetedLLInterval: Double = 3 * 60
+    @AppStorage(BackgroundRefreshManager.targetedLLEnabledKey)  private var targetedLLEnabled: Bool = true
+
+    // MARK: Display
     @AppStorage("defaultSort") private var defaultSort: String = "waitTime"
 
     @State private var systemTestFired = false
@@ -16,17 +29,18 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+
                 // MARK: Foreground Polling
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Foreground refresh: \(Int(pollingInterval))s")
+                        Text("Refresh every \(Int(pollingInterval))s while app is open")
                         Slider(value: $pollingInterval, in: 30...180, step: 15)
                     }
                 } header: { Text("Foreground Polling") }
 
-                // MARK: Background Polling
+                // MARK: Background — Full Sweep
                 Section {
-                    Toggle("Enable background polling", isOn: $backgroundEnabled)
+                    Toggle("Enable full-sweep polling", isOn: $backgroundEnabled)
                     if backgroundEnabled {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Interval: \(formatInterval(backgroundInterval))")
@@ -38,9 +52,49 @@ struct SettingsView: View {
                         }
                     }
                 } header: {
-                    Text("Background Polling")
+                    Text("Background — Full Sweep")
                 } footer: {
-                    Text("Background polling wakes the app to check alerts. iOS may delay wakes based on battery and usage — minimum effective interval is ~15 minutes.")
+                    Text("Fetches all park entities, updates the widget, and checks every active alert. iOS enforces ~15 min minimum regardless of this setting.")
+                        .font(.caption)
+                }
+
+                // MARK: Background — Targeted Wait Time
+                Section {
+                    Toggle("Enable targeted wait-time polling", isOn: $targetedWaitEnabled)
+                    if targetedWaitEnabled {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Interval: \(formatInterval(targetedWaitInterval))")
+                            Slider(
+                                value: $targetedWaitInterval,
+                                in: BackgroundRefreshManager.targetedMinInterval...BackgroundRefreshManager.targetedMaxInterval,
+                                step: 60
+                            )
+                        }
+                    }
+                } header: {
+                    Text("Background — Targeted Wait Time")
+                } footer: {
+                    Text("Only checks attractions you're monitoring for wait-time alerts. Records history for those attractions so graphs stay current even when the app is closed.")
+                        .font(.caption)
+                }
+
+                // MARK: Background — Targeted Lightning Lane
+                Section {
+                    Toggle("Enable Lightning Lane polling", isOn: $targetedLLEnabled)
+                    if targetedLLEnabled {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Interval: \(formatInterval(targetedLLInterval))")
+                            Slider(
+                                value: $targetedLLInterval,
+                                in: BackgroundRefreshManager.targetedMinInterval...BackgroundRefreshManager.targetedMaxInterval,
+                                step: 60
+                            )
+                        }
+                    }
+                } header: {
+                    Text("Background — Lightning Lane")
+                } footer: {
+                    Text("Only evaluates Lightning Lane availability alerts. Set this more aggressively than wait-time polling since LL windows open and close quickly.")
                         .font(.caption)
                 }
 
@@ -66,7 +120,6 @@ struct SettingsView: View {
 
                 // MARK: Notification Test Bench
                 Section {
-                    // Pipeline sanity check — confirms notifications reach the device.
                     Button {
                         Task {
                             await NotificationManager.send(
@@ -86,8 +139,6 @@ struct SettingsView: View {
                         .foregroundStyle(systemTestFired ? .green : .primary)
                     }
 
-                    // Fires [TEST] notifications for every enabled alert, ignoring cooldowns
-                    // and whether the actual conditions are currently met.
                     Button {
                         Task {
                             await alertStore.fireAllTests()
@@ -104,8 +155,6 @@ struct SettingsView: View {
                     }
                     .disabled(!alertStore.hasActiveAlerts)
 
-                    // Runs the real background-fetch alert logic against current live data.
-                    // Will only fire for alerts whose conditions are actually met right now.
                     Button {
                         Task {
                             await AlertStore.backgroundCheck(against: store.attractions)

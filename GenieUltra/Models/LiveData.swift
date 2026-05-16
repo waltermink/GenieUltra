@@ -53,8 +53,24 @@ struct ForecastEntry: Codable, Identifiable, Equatable {
     var id: String { time }
 }
 
-struct WaitTimeRecord: Identifiable {
-    let id = UUID()
+struct WaitTimeRecord: Identifiable, Codable {
+    let id: UUID
     let date: Date
     let waitTime: Int
+
+    init(date: Date, waitTime: Int) {
+        self.id = UUID()
+        self.date = date
+        self.waitTime = waitTime
+    }
+
+    // Exclude id from the encoded payload — it's ephemeral and regenerated on decode.
+    enum CodingKeys: String, CodingKey { case date, waitTime }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = UUID()
+        date = try c.decode(Date.self, forKey: .date)
+        waitTime = try c.decode(Int.self, forKey: .waitTime)
+    }
 }

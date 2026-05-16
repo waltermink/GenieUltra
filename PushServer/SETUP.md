@@ -38,7 +38,7 @@ You can configure **just ntfy**, **just Telegram**, or **both for redundancy**. 
 - macOS with Xcode installed
 - Node.js 18+ (`node -v` to verify)
 - An iPhone
-- A Cloudflare account (free, sign up at [dash.cloudflare.com/sign-up](https://dash.cloudflare.com/sign-up) — takes 30 seconds, only needs email)
+- A Cloudflare account (free, sign up at https://dash.cloudflare.com/sign-up — takes 30 seconds, only needs email)
 
 **You do NOT need:** Apple Developer Program, paid services, a credit card.
 
@@ -55,9 +55,11 @@ You need **at least one** of these. Setting up both is highly recommended for re
 3. **Topic name**: pick something secret and hard to guess. Example: `genieultra-walter-9k3p2j7t`. The topic name IS your password — anyone who knows it can send you notifications. Don't use a common word.
 4. Tap **Subscribe**
 5. Test it manually from your laptop:
+   
    ```bash
    curl -d "It works!" ntfy.sh/your-topic-name-here
    ```
+   
    Your phone should buzz within a second.
 6. **Save the topic name** — you'll paste it into a Cloudflare secret in Step 3.
 
@@ -70,17 +72,21 @@ You need **at least one** of these. Setting up both is highly recommended for re
 5. **Copy the HTTP API token** BotFather sends you. Looks like `7234567890:AAH...`. **Save it.**
 6. Send any message to your new bot (anything works, e.g. "hello"). This is required — bots can't message you until you message them first.
 7. Get your chat ID. Open this URL in any browser, replacing `<TOKEN>` with your bot's token:
+   
    ```
    https://api.telegram.org/bot<TOKEN>/getUpdates
    ```
+   
    Find `"chat":{"id":123456789,...` in the response. **That number is your chat ID.** Save it.
 
 Verify both work:
+
 ```bash
 curl -X POST \
   -d "chat_id=<YOUR_CHAT_ID>&text=It works" \
   https://api.telegram.org/bot<YOUR_TOKEN>/sendMessage
 ```
+
 Your Telegram app should show the message instantly.
 
 ---
@@ -120,6 +126,7 @@ wrangler kv namespace create ALERT_STATE
 ```
 
 Output looks like:
+
 ```
 ✨ Success!
 Add the following to your configuration file...
@@ -135,6 +142,7 @@ id      = "abcd1234..."   # ← paste here
 ```
 
 Also update the `[vars]` block:
+
 ```toml
 [vars]
 PARK_ID       = "PASTE_PARK_ID_FROM_STEP_2"
@@ -182,6 +190,7 @@ wrangler deploy
 ```
 
 Output includes your Worker's URL — something like:
+
 ```
 https://genieultra-push.YOUR_SUBDOMAIN.workers.dev
 ```
@@ -192,10 +201,11 @@ https://genieultra-push.YOUR_SUBDOMAIN.workers.dev
 
 ```bash
 # Should return JSON with channels listed
-curl https://genieultra-push.YOUR_SUBDOMAIN.workers.dev/health
+curl https://genieultra-push.wwmink.workers.dev/health
 ```
 
 Expected output:
+
 ```json
 {
   "ok": true,
@@ -208,9 +218,11 @@ Expected output:
 If `channels` is empty, you didn't set NTFY_TOPIC or both TELEGRAM_* secrets — go back to 3d.
 
 Watch the cron live:
+
 ```bash
 wrangler tail
 ```
+
 Every minute you should see a log line. Press Ctrl-C to exit.
 
 ---
@@ -259,6 +271,7 @@ Now you can ask Claude things like:
 > Curl the worker's /admin/state and tell me why my Pirates LL alert isn't firing.
 
 And Claude can run:
+
 ```bash
 source ~/.genieultra-worker.env
 curl -H "Authorization: Bearer $GENIEULTRA_SHARED_SECRET" \
@@ -266,6 +279,7 @@ curl -H "Authorization: Bearer $GENIEULTRA_SHARED_SECRET" \
 ```
 
 Admin endpoints available:
+
 - `GET /admin/state` — current alert config, dedup state, last poll info, configured channels
 - `POST /admin/clear-dedup` — clears dedup state (useful if you want to re-fire an alert)
 - `POST /admin/poll-now` — triggers an immediate poll (don't wait for the cron)
@@ -279,6 +293,7 @@ All require the `Authorization: Bearer <secret>` header.
 Cloudflare publishes an official MCP server that gives Claude full read/write access to your Workers, KV namespaces, secrets, and logs. This lets Claude make code changes and redeploy without your laptop being involved.
 
 1. In Claude Code, install the Cloudflare API MCP server. Add to `~/.claude/settings.json`:
+   
    ```json
    {
      "mcpServers": {
@@ -343,11 +358,13 @@ Same fix as above — `/health` is unauthenticated by design, everything else re
 ### `wrangler tail` shows cron running but no notifications fire
 
 The most likely cause is that no alerts are stored. Run:
+
 ```bash
 source ~/.genieultra-worker.env  # if you set this up in 6a
 curl -H "Authorization: Bearer $GENIEULTRA_SHARED_SECRET" \
      "$GENIEULTRA_WORKER_URL/admin/state"
 ```
+
 Look at `alerts` field — if it's `null`, the app hasn't synced any alerts. Open the app's Alerts tab, ensure at least one alert exists and is **toggled on**, then watch the Settings status row sync.
 
 ### Notifications arrive but the return time is wrong by an hour
@@ -360,6 +377,7 @@ The Worker uses `PARK_TIMEZONE = "America/New_York"` which handles DST automatic
 # Should list the cron trigger
 wrangler triggers list
 ```
+
 If empty, your `wrangler deploy` didn't pick up the `[triggers]` block. Confirm `wrangler.toml` has `crons = ["* * * * *"]` and redeploy.
 
 ### Worker logs show "no alerts configured yet" every minute
@@ -369,24 +387,26 @@ The iOS app hasn't successfully synced. Open Settings → Push Server, tap **Sav
 ### The app fires duplicate notifications
 
 The Worker has 1-hour cooldown on wait alerts and per-return-time dedup on LL alerts. If you somehow get duplicates, run:
+
 ```bash
 curl -X POST -H "Authorization: Bearer $GENIEULTRA_SHARED_SECRET" \
      "$GENIEULTRA_WORKER_URL/admin/clear-dedup"
 ```
+
 This wipes all dedup state. The next cron run will treat everything as new.
 
 ---
 
 ## Cost summary
 
-| Item | Monthly cost |
-|---|---|
-| Cloudflare Workers Free | $0 |
-| Cloudflare Workers KV Free (100K reads, 1K writes/day) | $0 |
-| ntfy.sh public service | $0 |
-| Telegram Bot API | $0 |
-| themeparks.wiki API | $0 |
-| **Total** | **$0** |
+| Item                                                   | Monthly cost |
+| ------------------------------------------------------ | ------------ |
+| Cloudflare Workers Free                                | $0           |
+| Cloudflare Workers KV Free (100K reads, 1K writes/day) | $0           |
+| ntfy.sh public service                                 | $0           |
+| Telegram Bot API                                       | $0           |
+| themeparks.wiki API                                    | $0           |
+| **Total**                                              | **$0**       |
 
 Free-tier limits are far beyond what this workload uses (cron does ~1440 reads/day, fires < 50 writes/day on a busy park day).
 

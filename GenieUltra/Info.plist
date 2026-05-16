@@ -4,9 +4,15 @@
 <dict>
 	<key>CFBundleGetInfoString</key>
 	<string></string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.genieultra.parkrefresh</string>
+		<string>com.genieultra.targeted.waittime</string>
+		<string>com.genieultra.targeted.ll</string>
 	</array>
 </dict>
 </plist>

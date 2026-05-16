@@ -30,6 +30,8 @@ class ParkDataStore {
     init() {
         let saved = UserDefaults.standard.stringArray(forKey: "knownQueueAttractionIDs") ?? []
         knownQueueAttractionIDs = Set(saved)
+        // Seed graphs with any data collected during previous sessions or background tasks.
+        waitTimeHistory = PersistedWaitHistory.load()
     }
 
     // MARK: - Initial Load
@@ -108,6 +110,19 @@ class ParkDataStore {
         pollingTask = nil
     }
 
+    /// Merge wait-time history written by background tasks into the in-memory store.
+    /// Call when the app returns to the foreground so graphs reflect background data.
+    func mergePersistedHistory() {
+        let persisted = PersistedWaitHistory.load()
+        for (id, records) in persisted {
+            let current = waitTimeHistory[id]
+            // Replace when persisted has more data than what's in memory (background added points).
+            if current == nil || records.count > (current?.count ?? 0) {
+                waitTimeHistory[id] = Array(records.suffix(PersistedWaitHistory.maxRecordsPerAttraction))
+            }
+        }
+    }
+
     // MARK: - Private Helpers
 
     private func resolveParkID() async throws {
@@ -150,6 +165,8 @@ class ParkDataStore {
         let now = Date()
         var queueIDsChanged = false
 
+        var newReadings: [(id: String, waitTime: Int)] = []
+
         for entity in fetchedAttractions {
             if entity.queue != nil {
                 if knownQueueAttractionIDs.insert(entity.id).inserted {
@@ -159,12 +176,16 @@ class ParkDataStore {
             if let waitTime = entity.queue?.standby?.waitTime {
                 var history = waitTimeHistory[entity.id] ?? []
                 history.append(WaitTimeRecord(date: now, waitTime: waitTime))
-                if history.count > 120 {
-                    history = Array(history.suffix(120))
+                if history.count > PersistedWaitHistory.maxRecordsPerAttraction {
+                    history = Array(history.suffix(PersistedWaitHistory.maxRecordsPerAttraction))
                 }
                 waitTimeHistory[entity.id] = history
+                newReadings.append((entity.id, waitTime))
             }
         }
+
+        // Persist new data points so background tasks and future sessions can see them.
+        PersistedWaitHistory.appendBatch(newReadings, at: now)
 
         if queueIDsChanged {
             UserDefaults.standard.set(Array(knownQueueAttractionIDs), forKey: "knownQueueAttractionIDs")

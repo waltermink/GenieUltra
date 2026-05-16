@@ -27,6 +27,12 @@ struct GenieUltraApp: App {
         .backgroundTask(.appRefresh(BackgroundRefreshManager.taskIdentifier)) {
             await BackgroundRefreshManager.performBackgroundFetch()
         }
+        .backgroundTask(.appRefresh(BackgroundRefreshManager.targetedWaitIdentifier)) {
+            await BackgroundRefreshManager.performTargetedWaitFetch()
+        }
+        .backgroundTask(.appRefresh(BackgroundRefreshManager.targetedLLIdentifier)) {
+            await BackgroundRefreshManager.performTargetedLLFetch()
+        }
     }
 }
 

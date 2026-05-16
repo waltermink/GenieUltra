@@ -1,4 +1,5 @@
 import Foundation
+import WidgetKit
 
 /// Persists the most recent live data response. Uses the App Group suite so the
 /// widget extension can read it. Falls back to UserDefaults.standard if the App
@@ -18,6 +19,7 @@ enum CachedParkData {
         guard let data = try? JSONEncoder().encode(response) else { return }
         defaults.set(data, forKey: responseKey)
         defaults.set(Date(), forKey: timestampKey)
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     static func load() -> EntityLiveDataResponse? {

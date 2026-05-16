@@ -104,94 +104,208 @@ Copy the ID next to `Magic Kingdom Park`. You'll paste it into `wrangler.toml`.
 
 ## Step 3 — Deploy the Cloudflare Worker
 
-### 3a. Install Wrangler & log in
+This is the only "real" infrastructure step. ~15 minutes the first time you do it. Once deployed it runs forever for free.
+
+### 3a. Make a Cloudflare account (skip if you already have one)
+
+1. Go to [dash.cloudflare.com/sign-up](https://dash.cloudflare.com/sign-up)
+2. Email + password. **No credit card needed.**
+3. Verify your email when their confirmation arrives
+4. You'll land on the Cloudflare dashboard — leave that browser tab open, you'll come back to it
+
+### 3b. Install Wrangler (Cloudflare's CLI)
+
+Open Terminal on your Mac.
+
+```bash
+# Check Node.js is installed (need 18 or newer)
+node --version
+```
+
+If you see `v18.x`, `v20.x`, or higher, you're good. If `command not found` or older, install Node first: `brew install node` (takes ~2 min).
+
+Install Wrangler globally:
 
 ```bash
 npm install -g wrangler
-wrangler --version       # should print 3.x or 4.x
-wrangler login           # opens browser to authorize
 ```
 
-### 3b. Create the KV namespace
+That command might print a bunch of deprecation warnings — ignore them. Verify it installed:
 
 ```bash
-cd PushServer
+wrangler --version
+```
+
+You should see something like `⛅️ wrangler 4.x.x`.
+
+### 3c. Log Wrangler in to your Cloudflare account
+
+```bash
+wrangler login
+```
+
+This pops open your browser to a Cloudflare auth page. Click **Allow** on the permissions screen. The browser will say "successfully logged in"; you can close that tab.
+
+Back in Terminal, you'll see:
+```
+Successfully logged in.
+```
+
+Verify it picked up your account:
+```bash
+wrangler whoami
+```
+You should see your email + your account ID.
+
+### 3d. Move into the PushServer directory
+
+```bash
+cd "/Users/wwmink/GitHub Repos/GenieUltra/.claude/worktrees/elastic-nightingale-339c08/PushServer"
+```
+
+> The path above is the worktree; if you've merged to your main branch, use that path instead. From here on every `wrangler` command needs to run from this directory because Wrangler reads `wrangler.toml` from the current directory.
+
+### 3e. Create the KV namespace
+
+KV (Key-Value) is Cloudflare's distributed key-value store. Your Worker uses it to remember the alert config across cron runs and to dedupe notifications.
+
+```bash
 wrangler kv namespace create ALERT_STATE
 ```
 
 Output looks like:
 ```
+🌀 Creating namespace with title "genieultra-push-ALERT_STATE"
 ✨ Success!
-Add the following to your configuration file...
-{ binding = "ALERT_STATE", id = "abcd1234..." }
+Add the following to your configuration file in your kv_namespaces array:
+{ binding = "ALERT_STATE", id = "abcd1234ef5678..." }
 ```
 
-**Copy the `id` value** and paste it into `PushServer/wrangler.toml`:
+**Copy the `id` value** (the long hex string after `id = "`). You need to paste it into `wrangler.toml`.
 
+Open `wrangler.toml` in any editor:
+```bash
+open -e wrangler.toml          # opens in TextEdit
+# or: code wrangler.toml       # VS Code
+# or: nano wrangler.toml       # in-terminal editor
+```
+
+Find this block:
 ```toml
 [[kv_namespaces]]
 binding = "ALERT_STATE"
-id      = "abcd1234..."   # ← paste here
+id      = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
 ```
 
-Also update the `[vars]` block:
+Replace the placeholder with the id you copied. Save the file.
+
+Also update the `[vars]` block (using the Magic Kingdom park ID you found in Step 2):
 ```toml
 [vars]
-PARK_ID       = "PASTE_PARK_ID_FROM_STEP_2"
-PARK_TIMEZONE = "America/New_York"   # IANA tz — DST handled automatically
+PARK_ID       = "75ea578a-adc8-4116-a54d-dccb60765ef9"   # ← paste your park ID
+PARK_TIMEZONE = "America/New_York"
 ```
 
-### 3c. Generate a shared secret
+(That UUID is the actual Magic Kingdom ID as of writing, but verify against your Step 2 output in case themeparks.wiki ever changes it.)
 
-This is the password your iOS app uses to talk to your Worker. Anything random and long enough:
+### 3f. Generate a shared secret
+
+This is the password the iOS app sends to authorize itself to your Worker. Anything random and long enough — generate one with:
 
 ```bash
 openssl rand -hex 32
 ```
 
-Copy it — you'll paste it into Wrangler **and** into the iOS app.
+You'll get something like:
+```
+9f2a8b3c4d5e6f7081a2b3c4d5e6f70819a2b3c4d5e6f70811234567890abcdef
+```
 
-### 3d. Set Wrangler secrets
+**Copy this string.** You'll paste it into Wrangler in the next step AND into the iOS app's Settings later. Save it somewhere — your password manager, Notes, etc.
 
-Run each command and paste the value when prompted:
+### 3g. Set the Wrangler secrets
+
+Secrets are encrypted environment variables that your Worker can read but that don't appear in `wrangler.toml`. Each one is set interactively:
 
 ```bash
 wrangler secret put SHARED_SECRET
-# paste the 64-char hex string from 3c
 ```
 
-**Pick at least one notification channel** (set both for redundancy):
+Wrangler will print:
+```
+✔ Enter a secret value: › 
+```
+
+Paste the hex string from 3f and press Enter. Wrangler responds:
+```
+✨ Success! Uploaded secret SHARED_SECRET
+```
+
+Now set the notification channel secrets. **You need at least one channel** — ntfy.sh is the simpler path, Telegram is more reliable, both works as redundancy.
+
+**If you set up ntfy in Step 1A:**
+```bash
+wrangler secret put NTFY_TOPIC
+```
+Paste your topic name (the exact string you typed when subscribing in the ntfy iOS app, e.g. `genieultra-walter-9k3p2j7t`).
+
+**If you set up Telegram in Step 1B:**
+```bash
+wrangler secret put TELEGRAM_BOT_TOKEN
+```
+Paste the BotFather token (`7234567890:AAH...`).
 
 ```bash
-# If you set up ntfy in Step 1A:
-wrangler secret put NTFY_TOPIC
-# paste your topic name, e.g. genieultra-walter-9k3p2j7t
-
-# If you set up Telegram in Step 1B:
-wrangler secret put TELEGRAM_BOT_TOKEN
-# paste the BotFather token
-
 wrangler secret put TELEGRAM_CHAT_ID
-# paste your numeric chat ID
 ```
+Paste your numeric chat ID.
 
-### 3e. Deploy
+Verify which secrets are set:
+```bash
+wrangler secret list
+```
+You should see entries for each secret you just put. Values aren't shown (that's the point of secrets).
+
+### 3h. Deploy
 
 ```bash
 wrangler deploy
 ```
 
-Output includes your Worker's URL — something like:
+Output looks like:
 ```
-https://genieultra-push.YOUR_SUBDOMAIN.workers.dev
+⛅️ wrangler 4.x.x
+-------------------
+Total Upload: 5.32 KiB / gzip: 1.89 KiB
+Worker Startup Time: 12 ms
+Your worker has access to the following bindings:
+- KV Namespaces:
+  - ALERT_STATE: abcd1234ef5678...
+- Vars:
+  - PARK_ID: "75ea578a-adc8-4116-a54d-dccb60765ef9"
+  - PARK_TIMEZONE: "America/New_York"
+Uploaded genieultra-push (1.23 sec)
+Deployed genieultra-push triggers (0.41 sec)
+  https://genieultra-push.YOUR_SUBDOMAIN.workers.dev
+  schedule: * * * * *
+Current Version ID: 12345678-...
 ```
 
-**Copy this URL.**
+**Copy the `https://genieultra-push.YOUR_SUBDOMAIN.workers.dev` URL.** You'll paste it into the iOS app's Settings shortly. `YOUR_SUBDOMAIN` is the Cloudflare-issued subdomain tied to your account (usually based on your email).
 
-### 3f. Smoke test
+### 3i. Verify in the Cloudflare dashboard (optional but reassuring)
+
+Go to [dash.cloudflare.com](https://dash.cloudflare.com), pick your account, then **Compute (Workers)** → **Workers & Pages** in the left sidebar. You should see `genieultra-push` listed.
+
+Click it → **Settings** tab → **Triggers** subsection. You should see a Cron Trigger row showing `* * * * *` (every minute). If it says "no triggers", something went wrong with the deploy — re-run `wrangler deploy`.
+
+Click the **Bindings** subsection. You should see the `ALERT_STATE` KV namespace listed, and your secrets + vars.
+
+### 3j. Smoke test from your Mac
+
+The unauthenticated `/health` endpoint is the quickest way to verify the Worker is responding:
 
 ```bash
-# Should return JSON with channels listed
 curl https://genieultra-push.YOUR_SUBDOMAIN.workers.dev/health
 ```
 
@@ -200,18 +314,46 @@ Expected output:
 {
   "ok": true,
   "service": "genieultra-push",
-  "time": "2026-05-15T...",
+  "time": "2026-05-16T...",
   "channels": ["ntfy"]
 }
 ```
 
-If `channels` is empty, you didn't set NTFY_TOPIC or both TELEGRAM_* secrets — go back to 3d.
+If `channels` is `[]`, you didn't set NTFY_TOPIC (or didn't set both TELEGRAM_* secrets) — go back to 3g.
 
-Watch the cron live:
+Now do a real end-to-end test. The `/test` endpoint requires auth:
+
 ```bash
+# Replace both placeholders below
+WORKER_URL="https://genieultra-push.YOUR_SUBDOMAIN.workers.dev"
+SECRET="paste-your-shared-secret-from-3f"
+
+curl -X POST -H "Authorization: Bearer $SECRET" "$WORKER_URL/test"
+```
+
+Within ~2 seconds your iOS ntfy app (and/or Telegram) should show a test notification "GenieUltra push test". If you got the notification, **the entire backend works**. You're done with this step.
+
+### 3k. Watch the cron run live (optional)
+
+In a separate Terminal tab:
+```bash
+cd "/Users/wwmink/GitHub Repos/GenieUltra/.claude/worktrees/elastic-nightingale-339c08/PushServer"
 wrangler tail
 ```
-Every minute you should see a log line. Press Ctrl-C to exit.
+
+`wrangler tail` streams the Worker's logs in real time. Within 60 seconds you'll see a `[poll] no alerts configured yet` line — that's the cron firing. Once you sync alerts from the iOS app, you'll see `[poll]` lines with actual evaluations. Press Ctrl-C to exit.
+
+### 3l. Common errors at this stage
+
+| Symptom | Fix |
+|---|---|
+| `wrangler login` opens browser but says "session expired" | Try `wrangler logout && wrangler login` |
+| `wrangler deploy` says "missing API token" | Run `wrangler login` again |
+| `wrangler deploy` says "kv namespace not found" | The id in `wrangler.toml` doesn't match what 3e printed — re-paste |
+| Deploy succeeds but `/health` returns 404 | DNS hasn't propagated yet, wait 30 seconds and retry |
+| Deploy succeeds but cron isn't running (no `[poll]` lines in `wrangler tail`) | Check Triggers in the dashboard. If empty, re-run `wrangler deploy` |
+| `/health` says `channels: []` | Re-run `wrangler secret put NTFY_TOPIC` and/or both TELEGRAM_* secrets |
+| Anything else weird | `wrangler tail` will show the actual error |
 
 ---
 
